@@ -496,7 +496,6 @@ def run_engine(source_file):
 
         mismatch_df = pd.DataFrame(mismatches)
 
-
         # ============================================================
         # باز کردن فایل اصلی برای حفظ قالب
         # ============================================================
@@ -997,3 +996,186 @@ def run_engine(source_file):
             print(f"  - {_name}: {_count} رکورد")
         for _name in _emptied_sheets:
             print(f"  - {_name}: دیگر رکوردی ندارد (خالی شد)")
+
+        print()
+        print("فایل اصلی دست‌نخورده می‌ماند.")
+        print("خروجی در مسیر زیر ذخیره می‌شود:")
+        print(OUTPUT_FILE)
+
+
+        # ============================================================
+        # استایل‌دهی ظاهری خروجی
+        # (فقط ظاهر؛ هیچ اثری روی منطق تطبیق/محاسبات بالا ندارد)
+        # روی همه شیت‌ها اجرا می‌شود، به‌جز main_sheet_ahmadi که باید
+        # کاملاً دست‌نخورده بماند.
+        # ============================================================
+
+        SHEET_TITLE_TRANSLATIONS = {
+            "main_sheet_ebi": "فهرست ابراهیم",
+            "red": "قرمزها",
+        }
+
+        STYLE_FONT_NAME = "B Nazanin"
+        STYLE_FONT_SIZE = 12
+        NUMERIC_FONT_NAME = "Tahoma"
+        NUMERIC_FONT_SIZE = 11
+        NUMERIC_COLUMN_NAMES = {"term", "telephone", "date", "price_of_mounth"}
+
+        TITLE_FILL = PatternFill("solid", fgColor="1F4E78")
+        HEADER_FILL = PatternFill("solid", fgColor="2E75B6")
+        RED_ROW_FILL = PatternFill("solid", fgColor="FFC7CE")
+        SIRJAN_ROW_FILL = PatternFill("solid", fgColor="BDD7EE")
+        CENTER_ALIGN = Alignment(horizontal="center", vertical="center")
+
+
+        def _column_font(column_name):
+            if column_name in NUMERIC_COLUMN_NAMES:
+                return Font(name=NUMERIC_FONT_NAME, size=NUMERIC_FONT_SIZE)
+            return Font(name=STYLE_FONT_NAME, size=STYLE_FONT_SIZE)
+
+
+        def style_sheet_appearance(ws, sheet_key):
+            if ws.max_row < 1 or ws.max_column < 1:
+                return  # شیت خالی؛ چیزی برای استایل‌دهی نیست
+
+            # آیا سطر عنوان از قبل وجود دارد؟ (برای جلوگیری از تکرار در اجراهای بعدی)
+            has_title = any(
+                mr.min_row == 1 and mr.max_row == 1 and mr.min_col == 1
+                for mr in ws.merged_cells.ranges
+            )
+            if not has_title:
+                ws.insert_rows(1)
+
+            max_col = ws.max_column
+            max_row = ws.max_row
+            header_row_idx = 2  # هدر ستون‌ها همیشه سطر ۲ است، داده از سطر ۳
+
+            header_values = [ws.cell(header_row_idx, c).value for c in range(1, max_col + 1)]
+            header_map = {}
+            for idx, h in enumerate(header_values, start=1):
+                if h is not None:
+                    header_map[str(h).strip().lower()] = idx
+
+            # --- سطر ۱: عنوان merge‌شده ---
+            for mr in list(ws.merged_cells.ranges):
+                if mr.min_row == 1 and mr.max_row == 1:
+                    ws.unmerge_cells(str(mr))
+            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max_col)
+            title_cell = ws.cell(1, 1)
+            title_cell.value = SHEET_TITLE_TRANSLATIONS.get(sheet_key, sheet_key)
+            title_cell.font = Font(name="B Nazanin", size=28, bold=True, color="FFFFFF")
+            title_cell.fill = TITLE_FILL
+            title_cell.alignment = CENTER_ALIGN
+            ws.row_dimensions[1].height = 30
+            for c in range(1, max_col + 1):
+                ws.cell(1, c).alignment = CENTER_ALIGN
+                ws.cell(1, c).fill = TITLE_FILL
+
+            # --- سطر ۲: هدر ستون‌ها ---
+            for c in range(1, max_col + 1):
+                cell = ws.cell(header_row_idx, c)
+                col_name = str(cell.value).strip().lower() if cell.value is not None else ""
+                base_font = _column_font(col_name)
+                cell.font = Font(name=base_font.name, size=base_font.size, bold=True, color="FFFFFF")
+                cell.fill = HEADER_FILL
+                cell.alignment = CENTER_ALIGN
+
+            # --- سطرهای داده ---
+            status_col = header_map.get("status")
+            forced_status = None
+            if "قرمز" in sheet_key:
+                forced_status = "قرمز"
+            elif "سیرجان" in sheet_key:
+                forced_status = "سیرجان"
+
+            for r in range(header_row_idx + 1, max_row + 1):
+                row_status = forced_status
+                if row_status is None and status_col:
+                    val = ws.cell(r, status_col).value
+                    row_status = str(val).strip() if val is not None else ""
+
+                row_fill = None
+                if row_status == "قرمز":
+                    row_fill = RED_ROW_FILL
+                elif row_status == "سیرجان":
+                    row_fill = SIRJAN_ROW_FILL
+
+                for c in range(1, max_col + 1):
+                    cell = ws.cell(r, c)
+                    col_name = str(header_values[c - 1]).strip().lower() if header_values[c - 1] is not None else ""
+                    cell.font = _column_font(col_name)
+                    cell.alignment = CENTER_ALIGN
+                    if row_fill is not None:
+                        cell.fill = row_fill
+
+                    if col_name == "price_of_mounth":
+                        cell.number_format = '"ريال" #,##0'
+                    elif col_name == "telephone":
+                        cell.number_format = '"("000") "000"-"0000'
+
+            # --- عرض ستون‌ها (Auto-fit تقریبی) ---
+            for c in range(1, max_col + 1):
+                col_letter = get_column_letter(c)
+                max_len = 0
+                for r in range(1, max_row + 1):
+                    v = ws.cell(r, c).value
+                    if v is None:
+                        continue
+                    max_len = max(max_len, len(str(v)))
+                ws.column_dimensions[col_letter].width = min(max(max_len + 4, 10), 40)
+
+            # --- فریز سطر ۱ و ۲ ---
+            ws.freeze_panes = "A3"
+
+            # --- جدول اکسل (Table) با استایل ساده و بدون راه‌راه ---
+            data_row_count = max_row - header_row_idx
+            if data_row_count >= 1:
+                for existing_table_name in list(ws.tables.keys()):
+                    del ws.tables[existing_table_name]
+
+                table_ref = f"A{header_row_idx}:{get_column_letter(max_col)}{max_row}"
+                safe_core = re.sub(r"[^A-Za-z0-9_]", "", sheet_key) or "sheet"
+                safe_name = f"tbl_{_table_index[0]}_{safe_core}"[:30]
+                _table_index[0] += 1
+                new_table = Table(displayName=safe_name, ref=table_ref)
+                new_table.tableStyleInfo = TableStyleInfo(
+                    name="TableStyleLight1",
+                    showRowStripes=False,
+                    showColumnStripes=False,
+                    showFirstColumn=False,
+                    showLastColumn=False,
+                )
+                ws.add_table(new_table)
+
+
+        _table_index = [1]
+
+        for _sheet_name in wb.sheetnames:
+            if _sheet_name == "main_sheet_ahmadi":
+                continue
+            style_sheet_appearance(wb[_sheet_name], _sheet_name)
+
+
+        # ============================================================
+        # ذخیره خروجی
+        # ============================================================
+
+        wb.save(OUTPUT_FILE)
+
+        print()
+        print("ذخیره فایل با موفقیت انجام شد.")
+        print(OUTPUT_FILE)
+
+
+    return {
+        "output_file": OUTPUT_FILE,
+        "log": _log_buffer.getvalue(),
+        "new_count": len(new_master),
+        "duplicate_count": len(duplicate_rows),
+        "mismatch_count": len(mismatch_df),
+        "red_count": int(red_count),
+        "representation_count": int(representation_count),
+        "coach_count": int(coach_count),
+        "paid_new_count": len(_new_paid_rows),
+        "paid_history_total": len(_all_paid_rows),
+    }
