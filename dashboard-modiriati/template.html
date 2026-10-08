@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ماشین وصول مطالبات · راه دانش عارف</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800;900&display=swap');
+
+:root{
+  --coral:#F0785A;
+  --coral-dark:#C85A3F;
+  --coral-soft:#FBE3DA;
+  --gold:#F0B400;
+  --gold-soft:#FCEDC2;
+  --blue:#0080C0;
+  --blue-soft:#DCEEF7;
+  --red:#E51A1A;
+  --red-soft:#FBDCDC;
+  --green:#2F9E6E;
+  --green-soft:#DFF3E9;
+  --ink:#2B211C;
+  --muted:#8A7A6E;
+  --paper:#FFF9F5;
+  --panel:#FFFFFF;
+  --line:#EEE0D6;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:'Vazirmatn',sans-serif;
+  min-height:100vh;
+}
+.wrap{max-width:1240px;margin:0 auto;padding:26px 22px 70px;}
+
+/* ---------- Header ---------- */
+.masthead{
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  padding-bottom:20px;margin-bottom:22px;border-bottom:3px solid var(--coral);
+}
+.masthead img.logo{width:64px;height:64px;border-radius:50%;flex-shrink:0;}
+.masthead .titles{flex:1;min-width:220px;}
+.masthead .org{font-size:.82rem;color:var(--muted);font-weight:600;margin:0 0 2px;}
+.masthead h1{font-size:1.55rem;font-weight:800;margin:0;letter-spacing:-.01em;}
+.masthead .meta{text-align:left;font-size:.8rem;color:var(--muted);font-weight:500;}
+.masthead .meta strong{color:var(--ink);}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:22px;}
+.compare-group{display:flex;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px;}
+.compare-btn{border:none;background:transparent;font-family:inherit;font-size:.8rem;font-weight:600;color:var(--muted);padding:7px 14px;border-radius:7px;cursor:pointer;}
+.compare-btn.active{background:var(--coral);color:#fff;}
+.actions{display:flex;gap:8px;}
+.btn{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-family:inherit;font-weight:700;font-size:.83rem;padding:9px 16px;border-radius:9px;cursor:pointer;}
+.btn:hover{border-color:var(--coral);}
+.btn.primary{background:var(--coral);border-color:var(--coral);color:#fff;}
+.btn.primary:hover{background:var(--coral-dark);border-color:var(--coral-dark);}
+#fileInput,#restoreInput{display:none;}
+
+/* ---------- Upload empty state ---------- */
+#uploadStage{
+  border:1.5px dashed var(--line);border-radius:16px;padding:60px 24px;text-align:center;background:var(--panel);
+}
+#uploadStage.drag{border-color:var(--coral);background:var(--coral-soft);}
+#uploadStage h2{font-size:1.2rem;margin:0 0 8px;font-weight:800;}
+#uploadStage p{color:var(--muted);font-size:.9rem;margin:0 0 22px;line-height:1.9;}
+#uploadStage code{background:var(--gold-soft);border-radius:5px;padding:1px 7px;font-size:.82rem;}
+#errorBox{display:none;background:var(--red-soft);border:1px solid var(--red);color:#8a1414;border-radius:10px;padding:14px 18px;font-size:.85rem;margin-top:16px;line-height:1.8;}
+
+/* ---------- Hero ledger ---------- */
+.hero-row{display:flex;gap:18px;margin-bottom:20px;flex-wrap:wrap;}
+.hero-row .hero{margin-bottom:0;flex:2.2;min-width:320px;}
+.hero-red{
+  flex:1;min-width:220px;background:#3a1414;border:2px solid var(--red);border-radius:18px;
+  padding:22px 24px;color:#fff;display:flex;flex-direction:column;justify-content:center;
+}
+.hero-red .lbl{font-size:.8rem;opacity:.85;margin-bottom:8px;line-height:1.7;}
+.hero-red .num{font-size:1.9rem;font-weight:900;color:#ff8f8f;font-variant-numeric:tabular-nums;line-height:1;}
+.hero-red .cnt{font-size:.85rem;opacity:.85;margin-top:8px;}
+.hero{
+  background:var(--coral);border-radius:18px;padding:26px 30px;margin-bottom:20px;color:#fff;
+  display:flex;flex-wrap:wrap;gap:26px;align-items:center;
+}
+.hero .main-figure{flex:1;min-width:240px;}
+.hero .main-figure .lbl{font-size:.85rem;opacity:.92;font-weight:600;margin-bottom:6px;}
+.hero .main-figure .num{font-size:2.6rem;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;}
+.hero .delta{display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-size:.85rem;font-weight:700;background:rgba(255,255,255,.18);padding:5px 12px;border-radius:20px;}
+.hero .delta.up{color:#fff;}
+.hero .delta.down{color:#2b211c;background:var(--gold-soft);}
+.hero .side-stats{display:flex;gap:26px;flex-wrap:wrap;}
+.hero .side-stats .cell{text-align:center;min-width:90px;}
+.hero .side-stats .cell .n{font-size:1.5rem;font-weight:800;font-variant-numeric:tabular-nums;}
+.hero .side-stats .cell .l{font-size:.74rem;opacity:.9;margin-top:3px;}
+
+/* ---------- Panels ---------- */
+.grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:18px;margin-bottom:18px;}
+@media(max-width:900px){.grid2{grid-template-columns:1fr;}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;margin-bottom:18px;}
+.panel h3{margin:0 0 3px;font-size:1rem;font-weight:800;}
+.panel .sub{color:var(--muted);font-size:.78rem;margin:0 0 16px;}
+.chart-box{position:relative;height:240px;}
+.chart-box.tall{height:270px;}
+.chart-empty{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;
+  color:var(--muted);font-size:.85rem;padding:20px;background:var(--panel);
+}
+
+/* ---------- Portfolio breakdown ---------- */
+.rep-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;}
+.rep-card{border:1px solid var(--line);border-radius:12px;padding:14px 16px;border-inline-start:4px solid var(--muted);}
+.rep-card .name{font-weight:700;font-size:.88rem;margin-bottom:6px;}
+.rep-card .amt{font-size:1.15rem;font-weight:800;font-variant-numeric:tabular-nums;}
+.rep-card .cnt{font-size:.78rem;color:var(--muted);margin-top:2px;}
+.rep-card .pct{font-size:.72rem;color:var(--muted);margin-top:6px;}
+
+/* ---------- Coach table ---------- */
+.table-scroll{max-height:460px;overflow:auto;border-radius:12px;}
+table{width:100%;border-collapse:collapse;font-size:.83rem;}
+thead th{position:sticky;top:0;background:var(--gold-soft);text-align:right;padding:11px 14px;font-weight:700;font-size:.78rem;border-bottom:1px solid var(--line);white-space:nowrap;}
+tbody td{padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap;font-variant-numeric:tabular-nums;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover{background:var(--paper);}
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:.72rem;font-weight:700;}
+.badge.good{background:var(--green-soft);color:#1c6b48;}
+.badge.warn{background:var(--gold-soft);color:#8a6300;}
+.badge.bad{background:var(--red-soft);color:#8a1414;}
+.badge.pending{background:var(--blue-soft);color:#0a5a86;}
+.risk-dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-inline-end:4px;}
+
+.hidden{display:none !important;}
+.confirm-overlay{
+  position:fixed;inset:0;background:rgba(43,33,28,.55);z-index:1000;
+  display:flex;align-items:center;justify-content:center;padding:20px;
+}
+.confirm-box{background:var(--panel);border-radius:16px;padding:26px 28px;max-width:420px;box-shadow:0 20px 50px rgba(0,0,0,.25);}
+.confirm-box p{margin:0 0 20px;font-size:.9rem;line-height:1.9;}
+.confirm-actions{display:flex;gap:10px;justify-content:flex-end;}
+.nr-kpi.red-kpi{background:var(--red-soft);border-color:var(--red);}
+.red-panel{border-color:var(--red);border-width:1.5px;}
+
+/* ---------------- non-red analysis ---------------- */
+.nr-kpis{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;}
+.nr-kpi{flex:1;min-width:160px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 18px;}
+.nr-kpi.high{border-color:var(--red);background:var(--red-soft);}
+.nr-kpi .l{font-size:.78rem;color:var(--muted);margin-bottom:6px;}
+.nr-kpi .v{font-size:1.3rem;font-weight:800;font-variant-numeric:tabular-nums;}
+.risk-tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+@media(max-width:760px){.risk-tiers{grid-template-columns:1fr;}}
+.risk-tier{text-align:center;border:1px solid var(--line);border-radius:14px;padding:18px 12px;}
+.donut-wrap{position:relative;width:120px;height:120px;margin:0 auto 12px;}
+.donut-wrap canvas{width:100% !important;height:100% !important;}
+.donut-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:1.15rem;font-weight:800;}
+.risk-tier .lbl{font-weight:700;font-size:.88rem;margin-bottom:4px;}
+.risk-tier .cnt{font-size:.8rem;color:var(--muted);}
+.risk-tier .amt{font-size:.8rem;color:var(--ink);font-weight:600;margin-top:4px;}
+
+/* ---------------- period changes ---------------- */
+.period-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+@media(max-width:760px){.period-grid{grid-template-columns:1fr;}}
+.period-cell{border-radius:12px;padding:16px 18px;text-align:center;border:1px solid var(--line);}
+.period-cell.new{background:var(--blue-soft);}
+.period-cell.resolved{background:var(--green-soft);}
+.period-cell.net{background:var(--gold-soft);}
+.period-lbl{font-size:.8rem;color:var(--muted);margin-bottom:6px;}
+.period-num{font-size:1.6rem;font-weight:800;font-variant-numeric:tabular-nums;}
+.period-amt{font-size:.78rem;color:var(--muted);margin-top:4px;}
+
+/* ---------------- coach rank list ---------------- */
+.rank-row{display:flex;align-items:center;gap:10px;padding:9px 6px;border-bottom:1px solid var(--line);font-size:.85rem;flex-wrap:wrap;}
+.rank-row:last-child{border-bottom:none;}
+.rank-num{width:22px;height:22px;border-radius:50%;background:var(--coral);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:800;flex-shrink:0;}
+.rank-name{font-weight:700;min-width:90px;}
+.rank-detail{color:var(--muted);font-size:.78rem;margin-inline-start:auto;}
+.rank-arrow{font-size:.75rem;font-weight:700;padding:2px 8px;border-radius:10px;}
+.rank-arrow.up{color:#1c6b48;background:var(--green-soft);}
+.rank-arrow.down{color:#8a1414;background:var(--red-soft);}
+.rank-arrow.same{color:var(--muted);background:var(--paper);}
+.rank-arrow.new{color:#0a5a86;background:var(--blue-soft);}
+
+/* ---------- Footer signature ---------- */
+.app-footer{
+  margin-top:34px;padding-top:18px;border-top:1px solid var(--line);
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;
+  font-size:.76rem;color:var(--muted);
+}
+.app-footer .sig{font-weight:600;}
+
+/* ---------- Print ---------- */
+@media print{
+  body{background:#fff;}
+  .no-print{display:none !important;}
+  .wrap{max-width:100%;padding:0;}
+  .hero{background:#fff !important;color:var(--ink) !important;border:2px solid var(--coral);}
+  .hero .delta{background:var(--gold-soft) !important;color:var(--ink) !important;}
+  .panel{break-inside:avoid;border:1px solid #ccc;}
+  .grid2{grid-template-columns:1fr 1fr;}
+  @page{size:A4 landscape;margin:12mm;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <img class="logo" src="data:image/jpeg;base64,__LOGO_B64__" alt="لوگو">
+    <div class="titles">
+      <p class="org">موسسه راه دانش عارف</p>
+      <h1>ماشین وصول مطالبات</h1>
+    </div>
+    <div class="meta no-print" id="reportMeta"></div>
+  </div>
+
+  <div class="topbar no-print">
+    <div class="compare-group" id="compareGroup">
+      <button class="compare-btn active" data-cmp="prev">آپلود قبلی</button>
+      <button class="compare-btn" data-cmp="week">هفته پیش</button>
+      <button class="compare-btn" data-cmp="month">ماه پیش</button>
+    </div>
+    <div class="actions">
+      <button class="btn" id="backupBtn">پشتیبان‌گیری تاریخچه</button>
+      <button class="btn" id="restoreBtn">بازیابی پشتیبان</button>
+      <input type="file" id="restoreInput" accept=".json">
+      <button class="btn" id="clearHistoryBtn" style="color:#8a1414;">پاک‌سازی کامل تاریخچه</button>
+      <button class="btn" id="pngBtn">خروجی PNG</button>
+      <button class="btn" id="printBtn">چاپ گزارش</button>
+      <button class="btn primary" id="pickFileBtn">بارگذاری فایل جدید</button>
+      <input type="file" id="fileInput" accept=".xlsx,.xlsm,.xltx,.xltm">
+    </div>
+  </div>
+
+  <div id="errorBox"></div>
+
+  <div id="confirmBox" class="hidden confirm-overlay">
+    <div class="confirm-box">
+      <p id="confirmMsg"></p>
+      <div class="confirm-actions">
+        <button class="btn" id="confirmNo">انصراف</button>
+        <button class="btn primary" id="confirmYes" style="background:var(--red);border-color:var(--red);">تأیید و پاک‌سازی</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="uploadStage">
+    <h2>فایل main_sheet_ebi را بارگذاری کنید</h2>
+    <p>هر بار که فایل خروجی موتور وصول را بارگذاری کنید، یک عکس فوری از وضعیت همان لحظه (بر اساس تاریخ واقعی سیستم شما) ذخیره می‌شود تا بشود روند واقعی هفته‌به‌هفته را دید.<br>داده‌ها فقط در همین مرورگر ذخیره می‌شوند.</p>
+    <button class="btn primary" id="pickFileBtn2">انتخاب فایل Excel</button>
+  </div>
+
+  <div id="dashStage" class="hidden">
+
+    <div class="hero-row">
+      <div class="hero">
+        <div class="main-figure">
+          <div class="lbl">کل مطالبات قابل پیگیری (غیرقرمز)</div>
+          <div class="num" id="heroTotal">—</div>
+          <div class="delta" id="heroDelta"></div>
+        </div>
+        <div class="side-stats">
+          <div class="cell"><div class="n" id="heroCount">—</div><div class="l">پرونده قابل پیگیری</div></div>
+          <div class="cell"><div class="n" id="heroRep">—</div><div class="l">اعضای نمایندگی</div></div>
+          <div class="cell"><div class="n" id="heroNormal">—</div><div class="l">عادی</div></div>
+        </div>
+      </div>
+      <div class="hero-red">
+        <div class="lbl">بدهی قرمز (جدا از آمار عادی، فقط با اصلاح دستی تغییر می‌کند)</div>
+        <div class="num" id="heroRedAmount">—</div>
+        <div class="cnt"><span id="heroRed">—</span> پرونده قرمز</div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="panel">
+        <h3>روند مطالبات قابل‌پیگیری بر اساس تاریخ سررسید</h3>
+        <p class="sub">حجم و مبلغ اقساط جاری به تفکیک ماه سررسید — بدون احتساب قرمزها</p>
+        <div class="chart-box tall"><canvas id="dueTrendChart"></canvas><div class="chart-empty hidden" id="dueTrendChart_empty"></div></div>
+      </div>
+      <div class="panel">
+        <h3>روند واقعی در طول زمان</h3>
+        <p class="sub">بر اساس تاریخ هر بار که گزارش را بارگذاری کرده‌اید</p>
+        <div class="chart-box tall"><canvas id="historyChart"></canvas><div class="chart-empty hidden" id="historyChart_empty"></div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>ترکیب پرتفوی</h3>
+      <p class="sub">هر نمایندگی جدا از وضعیت قرمز و عادی نمایش داده می‌شود</p>
+      <div class="grid2" style="margin-bottom:0;">
+        <div class="chart-box"><canvas id="portfolioChart"></canvas></div>
+        <div class="rep-grid" id="repGrid"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>دسته‌بندی ریسک (غیرقرمز)</h3>
+      <p class="sub">دانشجویانی که هنوز باید فعالانه پیگیری شوند، بر اساس تعداد قسط معوق</p>
+      <div class="nr-kpis">
+        <div class="nr-kpi"><div class="l">کل بدهی غیرقرمز</div><div class="v" id="nrTotalAmount">—</div></div>
+        <div class="nr-kpi"><div class="l">دانشجویان غیرقرمز</div><div class="v" id="nrTotalCount">—</div></div>
+        <div class="nr-kpi high"><div class="l">بدهی پرریسک</div><div class="v" id="nrHighAmount">—</div></div>
+      </div>
+      <div class="risk-tiers">
+        <div class="risk-tier">
+          <div class="donut-wrap"><canvas id="riskDonut_normal"></canvas><div class="donut-pct" id="riskPct_normal">—</div></div>
+          <div class="lbl" id="riskLbl_normal"></div>
+          <div class="cnt" id="riskCnt_normal"></div>
+          <div class="amt" id="riskAmt_normal"></div>
+        </div>
+        <div class="risk-tier">
+          <div class="donut-wrap"><canvas id="riskDonut_medium"></canvas><div class="donut-pct" id="riskPct_medium">—</div></div>
+          <div class="lbl" id="riskLbl_medium"></div>
+          <div class="cnt" id="riskCnt_medium"></div>
+          <div class="amt" id="riskAmt_medium"></div>
+        </div>
+        <div class="risk-tier">
+          <div class="donut-wrap"><canvas id="riskDonut_high"></canvas><div class="donut-pct" id="riskPct_high">—</div></div>
+          <div class="lbl" id="riskLbl_high"></div>
+          <div class="cnt" id="riskCnt_high"></div>
+          <div class="amt" id="riskAmt_high"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel red-panel">
+      <h3>پرونده‌های قرمز</h3>
+      <p class="sub">کاملاً مجزا از آمار عادی — فقط با اصلاح دستی در ebi از این وضعیت خارج می‌شوند</p>
+      <div class="nr-kpis">
+        <div class="nr-kpi red-kpi"><div class="l">جمع بدهی قرمز</div><div class="v" id="redTotalAmount">—</div></div>
+        <div class="nr-kpi red-kpi"><div class="l">تعداد پرونده قرمز</div><div class="v" id="redTotalCount">—</div></div>
+        <div class="nr-kpi red-kpi"><div class="l">سهم از کل مطالبات</div><div class="v" id="redSharePct">—</div></div>
+      </div>
+      <h3 style="margin-top:20px;font-size:.92rem;">روند سررسید مبالغ قرمز</h3>
+      <div class="chart-box"><canvas id="redDueTrendChart"></canvas><div class="chart-empty hidden" id="redDueTrendChart_empty"></div></div>
+      <h3 style="margin-top:20px;font-size:.92rem;">۵ پرونده قرمز با بیشترین بدهی</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>#</th><th>نام و نام‌خانوادگی</th><th>جمع بدهی</th><th>تعداد قسط</th></tr></thead>
+          <tbody id="redDebtorsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>پرونده‌های جدید و حل‌شده این دوره</h3>
+      <p class="sub">مقایسه با بازه انتخاب‌شده در بالای صفحه</p>
+      <div class="period-grid" id="periodChangesBox"></div>
+    </div>
+
+    <div class="panel">
+      <h3>رتبه‌بندی کارشناسان</h3>
+      <p class="sub">بر اساس مبلغ مدیریت‌شده، با تغییر رتبه نسبت به دوره قبل</p>
+      <div class="chart-box tall" style="margin-bottom:14px;"><canvas id="coachBarChart"></canvas></div>
+      <div id="coachRankList"></div>
+    </div>
+
+    <div class="panel">
+      <h3>عملکرد تفصیلی کارشناسان</h3>
+      <p class="sub">حجم پرونده، مبلغ، توزیع ریسک قسط معوق، و نرخ وصول نسبت به بازه انتخابی</p>
+      <div class="table-scroll">
+        <table>
+          <thead id="coachHead"></thead>
+          <tbody id="coachBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>۱۰ بدهکار برتر (غیرقرمز)</h3>
+      <p class="sub">بیشترین مبلغ معوق فعلی در بین پرونده‌های قابل پیگیری — قرمزها در بخش «پرونده‌های قرمز» جدا آمده‌اند</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>#</th><th>نام و نام‌خانوادگی</th><th>جمع بدهی</th><th>تعداد قسط</th><th>وضعیت / کارشناس</th></tr></thead>
+          <tbody id="debtorsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="app-footer">
+      <span>www.mmrd.ir · موسسه راه دانش عارف</span>
+      <span class="sig">توسعه‌دهنده: ابراهیم سلیمی</span>
+    </div>
+
+  </div>
+</div>
+
+<script>
+__APP_JS__
+</script>
+</body>
+</html>
