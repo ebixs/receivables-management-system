@@ -1,124 +1,151 @@
-# Receivables Management System
+<div align="center">
 
-A Python-based receivables management and reconciliation system with Excel automation, business-rule processing, reporting, and a management dashboard.
+# 🌳 Receivables Management & Reconciliation System
 
-> **Public portfolio version:** source code and documentation are prepared for demonstration and software-engineering review. Real customer, employee, financial, and organizational records are intentionally excluded.
+### A Python-based receivables management and reconciliation system with Excel automation, business-rule processing, reporting, and a management dashboard.
+
+</div>
 
 ## Overview
 
-This project automates a recurring receivables workflow built around Excel-based operational data. It combines a desktop application, a reusable Python processing engine, and a browser-based management dashboard.
+This project provides a practical workflow for processing receivables data from Excel, applying reconciliation and business rules, producing structured Excel outputs, and reviewing results through a management dashboard.
 
-### Core capabilities
+The public repository contains the application source code and dashboard components. Real operational/customer data is intentionally excluded.
 
-- Excel-based data processing with `pandas` and `openpyxl`
-- Normalization and exact matching of records
-- Duplicate and mismatch detection
-- Business-rule based assignment and status handling
-- Automated Excel output generation
-- Persian/Jalali date handling
-- Desktop GUI for non-technical users
-- Management dashboard for summaries and reporting
-- Reusable processing engine that can be called independently from the GUI
+## Main Components
 
-## Architecture
+| Component | Purpose |
+|---|---|
+| **Desktop Application** | Simple GUI for selecting an Excel input file, running the processing engine, opening the latest output, and launching the dashboard. |
+| **Python Engine** | Core reconciliation and business-rule processing implemented in Python. |
+| **Management Dashboard** | Standalone HTML dashboard for analysis, reporting, and visualization of processed results. |
 
-```
-Excel input
-    │
-    ▼
-Desktop application
-    │
-    ▼
-Python processing engine
-    │
-    ├── validation & normalization
-    ├── matching & reconciliation
-    ├── business rules
-    ├── mismatch reporting
-    └── Excel output
-             │
-             ▼
-      Management dashboard
-```
+## Repository Structure
 
-## Technology Stack
-
-- Python 3.9+
-- pandas
-- openpyxl
-- Tkinter
-- HTML / CSS / JavaScript
-- Excel automation
-
-## Project Structure
-
-```
+```text
 receivables-management-system/
+│
 ├── README.md
-├── .gitignore
+│
 ├── python/
 │   ├── app_desktop.py
 │   ├── wosool_engine.py
 │   ├── requirements.txt
-│   └── build_exe.bat
+│   ├── build_exe.bat
+│   └── app_icon.ico
+│
 ├── dashboard/
 │   └── dashboard_modiriati_FINAL.html
+│
 └── dashboard-modiriati/
     ├── app.js
+    ├── template.html
     ├── dashboard_modiriati_FINAL.html
-    └── template.html
+    └── logo_base64.txt
 ```
 
-## Running the Python Application
+## Features
 
-Create a virtual environment and install the dependencies:
+- Excel-based receivables processing
+- Reconciliation of installment/term records
+- Business-rule processing for new, paid, duplicate, and special-status records
+- Automated Excel output generation
+- Secondary reporting sheets
+- Desktop GUI built with Tkinter
+- Standalone management dashboard
+- Persian-language reporting and visualization
+- Windows executable build workflow with PyInstaller
+- Separation of source code from operational data
+
+## Technology Stack
+
+- Python
+- pandas
+- openpyxl
+- Tkinter
+- HTML / CSS / JavaScript
+- Chart.js
+- SheetJS
+- PyInstaller
+
+## Requirements
+
+For development/building:
+
+- Windows
+- Python 3.9+
+- pip
+
+Install Python dependencies:
 
 ```bash
-python -m venv .venv
-
-# Windows
-.venv\\Scripts\\activate
-
-# Linux / macOS
-source .venv/bin/activate
-
 pip install -r python/requirements.txt
 ```
 
-Run the desktop application:
+## Build the Windows Application
 
-```bash
-python python/app_desktop.py
+From the `python` directory on Windows:
+
+```text
+build_exe.bat
 ```
 
-## Data Privacy
+The script installs the required packages, builds the executable with PyInstaller, and assembles a `release` directory containing the application and dashboard.
 
-This repository intentionally contains **no real customer records, payment files, phone numbers, personal identifiers, or operational Excel workbooks**.
+## Using the Application
 
-For a production deployment, input/output Excel files should remain outside the Git repository and should be handled according to the organization's security and privacy requirements.
+1. Start the desktop application.
+2. Select the source Excel workbook.
+3. Run the reconciliation process.
+4. Review the generated log and Excel output.
+5. Open the management dashboard and load the generated result when required.
 
-## Design Principles
+> Operational Excel files containing real customer or financial information are not included in this public repository.
 
-- Keep business rules explicit and auditable.
-- Separate data processing from the user interface.
-- Preserve source data during reconciliation.
-- Report mismatches instead of silently overwriting conflicting records.
-- Keep operational data outside source control.
+## Data & Privacy
 
-## Future Improvements
+This repository is intended as a **public software/project showcase**.
 
-- Database-backed storage instead of operational Excel files
-- Automated scheduled reporting
-- Authentication and role-based access
-- Automated tests and CI
-- Containerized deployment
+Do not commit:
+
+- Real customer/student records
+- Telephone numbers or other personal identifiers
+- Financial transaction data
+- Internal operational Excel workbooks
+- Generated reports containing real data
+- Local configuration or temporary files
+
+Use anonymized/sample data for demonstrations.
+
+## Business Logic
+
+The processing engine applies project-specific reconciliation rules to identify changes between source datasets, preserve required records, and generate reporting outputs.
+
+The exact operational rules are implemented in `python/wosool_engine.py`.
+
+## Dashboard
+
+The dashboard is a standalone HTML interface that reads processed Excel output locally in the browser and provides management-oriented views such as:
+
+- receivables summaries
+- installment counts
+- amounts
+- status breakdowns
+- personnel/coach workload
+- monthly trends
+- reconciliation-related indicators
+
+## Roadmap
+
+- [x] Desktop GUI
+- [x] Excel processing engine
+- [x] Management dashboard
+- [x] Windows executable build
+- [ ] Database-backed storage
+- [ ] Automated scheduled reporting
+- [ ] Additional tests and CI validation
 
 ## Author
 
-**Ebrahim Salimi**
+**ابراهیم سلیمی**
 
-GitHub: https://github.com/ebixs
-
-## License
-
-This repository is provided as a portfolio/demo project. A production license and organizational usage terms should be defined before redistribution.
