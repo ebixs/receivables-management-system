@@ -17,6 +17,7 @@ Excel/
 *.xls
 *.xlsm
 !sample/sample_input.xlsx
+!template/input_template.xlsx
 
 # Local settings created by the desktop app
 python/settings.json

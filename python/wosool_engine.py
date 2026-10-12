@@ -44,6 +44,7 @@ MISMATCH_SHEET = "Manual review discrepancy"
 RED_SHEET = "Reds"
 CLEARED_SHEET = "Cleared checks"
 RED_LEGACY_SHEET = "red"
+GUIDE_SHEET = "Guide"   # شیت راهنمای فایل قالب؛ موتور به آن دست نمی‌زند
 
 LEGACY_SHEET_NAMES = {
     MAIN_SHEET: ["main_sheet_ebi"],
@@ -870,6 +871,7 @@ def run_engine(source_file, settings=None):
         _RESERVED_SHEETS = {
             MAIN_SHEET, RAW_SHEET, _PAID_SHEET,
             _NEW_ADDED_SHEET, _MISMATCH_SHEET, _RED_SHEET, _RED_LEGACY_SHEET,
+            GUIDE_SHEET,
         }
         for _legacy_list in LEGACY_SHEET_NAMES.values():
             _RESERVED_SHEETS.update(_legacy_list)
@@ -1355,8 +1357,8 @@ def run_engine(source_file, settings=None):
         _table_index = [1]
 
         for _sheet_name in wb.sheetnames:
-            if _sheet_name == RAW_SHEET:
-                continue   # شیت خام مالی کاملاً دست‌نخورده می‌ماند
+            if _sheet_name in (RAW_SHEET, GUIDE_SHEET):
+                continue   # شیت خام مالی و شیت راهنما کاملاً دست‌نخورده می‌مانند
             style_sheet_appearance(wb[_sheet_name], _sheet_name)
 
 

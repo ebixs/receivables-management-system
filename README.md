@@ -47,7 +47,9 @@ One `.xlsx` file with two sheets and these columns:
 
 Old institute files using `main_sheet_ebi` / `main_sheet_ahmadi` and the old Persian sheet names are still accepted and are renamed in the output.
 
-A fully fictional example is in [`sample/sample_input.xlsx`](sample/sample_input.xlsx) (regenerate with `python sample/make_sample.py`).
+**Start from the blank template:** [`template/input_template.xlsx`](template/input_template.xlsx). It has a **Guide** sheet that explains every column, plus the two empty sheets as Excel Tables ready for your data (hover a header to see its note). Put your current follow-up list in *Main sheet* and paste the finance export into *Initial raw financial sheet* before each run.
+
+A filled, fully fictional example is in [`sample/sample_input.xlsx`](sample/sample_input.xlsx) (regenerate with `python sample/make_sample.py`).
 
 ### Business rules
 
@@ -129,7 +131,8 @@ Real Excel files are ignored by `.gitignore`. Never commit customer names, phone
 
 - ستون `status`: خالی یعنی عادی · `قرمز` یعنی قرمز · هر مقدار دیگر یعنی نام نمایندگی (مثل `agency 1`).
 - فایل‌های قدیمی با نام‌های `main_sheet_ebi` و `main_sheet_ahmadi` هم پذیرفته می‌شوند.
-- نمونه‌ی کاملاً ساختگی: [`sample/sample_input.xlsx`](sample/sample_input.xlsx)
+- **فایل قالب خالی برای شروع:** [`template/input_template.xlsx`](template/input_template.xlsx). یک شیت **Guide** دارد که همه‌ی ستون‌ها را توضیح می‌دهد، و دو شیت خالی که به‌صورت Table اکسل آماده‌ی ورود داده‌اند (روی هر سرستون بروید تا توضیحش را ببینید). فهرست فعلی پیگیری را در Main sheet وارد کنید و قبل از هر اجرا، خروجی بخش مالی را در Initial raw financial sheet بچسبانید.
+- نمونه‌ی پرشده و کاملاً ساختگی: [`sample/sample_input.xlsx`](sample/sample_input.xlsx)
 
 ### قوانین
 
