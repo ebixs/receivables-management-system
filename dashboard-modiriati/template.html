@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ماشین وصول مطالبات · راه دانش عارف</title>
+<title>ماشین وصول مطالبات</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -43,7 +43,7 @@ body{
   display:flex;align-items:center;gap:18px;flex-wrap:wrap;
   padding-bottom:20px;margin-bottom:22px;border-bottom:3px solid var(--coral);
 }
-.masthead img.logo{width:64px;height:64px;border-radius:50%;flex-shrink:0;}
+.masthead img.logo{width:64px;height:64px;border-radius:50%;flex-shrink:0;object-fit:contain;background:#fff;}
 .masthead .titles{flex:1;min-width:220px;}
 .masthead .org{font-size:.82rem;color:var(--muted);font-weight:600;margin:0 0 2px;}
 .masthead h1{font-size:1.55rem;font-weight:800;margin:0;letter-spacing:-.01em;}
@@ -139,6 +139,12 @@ tbody tr:hover{background:var(--paper);}
 .confirm-box{background:var(--panel);border-radius:16px;padding:26px 28px;max-width:420px;box-shadow:0 20px 50px rgba(0,0,0,.25);}
 .confirm-box p{margin:0 0 20px;font-size:.9rem;line-height:1.9;}
 .confirm-actions{display:flex;gap:10px;justify-content:flex-end;}
+.brand-form{display:flex;flex-direction:column;gap:12px;margin-bottom:20px;min-width:300px;}
+.brand-form label{display:flex;flex-direction:column;gap:5px;font-size:.82rem;font-weight:600;color:var(--muted);}
+.brand-form input[type=text]{font-family:inherit;font-size:.9rem;padding:8px 10px;border:1px solid var(--line);border-radius:8px;color:var(--ink);}
+.brand-logo-row{display:flex;align-items:center;gap:10px;}
+.brand-logo-row img{width:48px;height:48px;border-radius:50%;object-fit:contain;background:#fff;border:1px solid var(--line);}
+.brand-hint{font-size:.74rem;color:var(--muted);line-height:1.8;margin:0;}
 .nr-kpi.red-kpi{background:var(--red-soft);border-color:var(--red);}
 .red-panel{border-color:var(--red);border-width:1.5px;}
 
@@ -206,9 +212,9 @@ tbody tr:hover{background:var(--paper);}
 <div class="wrap">
 
   <div class="masthead">
-    <img class="logo" src="data:image/jpeg;base64,__LOGO_B64__" alt="لوگو">
+    <img class="logo" id="brandLogo" src="__DEFAULT_LOGO__" alt="لوگو">
     <div class="titles">
-      <p class="org">موسسه راه دانش عارف</p>
+      <p class="org" id="brandOrg">نام سازمان شما</p>
       <h1>ماشین وصول مطالبات</h1>
     </div>
     <div class="meta no-print" id="reportMeta"></div>
@@ -227,6 +233,7 @@ tbody tr:hover{background:var(--paper);}
       <button class="btn" id="clearHistoryBtn" style="color:#8a1414;">پاک‌سازی کامل تاریخچه</button>
       <button class="btn" id="pngBtn">خروجی PNG</button>
       <button class="btn" id="printBtn">چاپ گزارش</button>
+      <button class="btn" id="brandBtn">⚙ تنظیمات برند</button>
       <button class="btn primary" id="pickFileBtn">بارگذاری فایل جدید</button>
       <input type="file" id="fileInput" accept=".xlsx,.xlsm,.xltx,.xltm">
     </div>
@@ -244,8 +251,34 @@ tbody tr:hover{background:var(--paper);}
     </div>
   </div>
 
+  <div id="brandBox" class="hidden confirm-overlay">
+    <div class="confirm-box">
+      <div class="brand-form">
+        <label>نام سازمان / شرکت
+          <input type="text" id="brandOrgInput" placeholder="مثلاً: موسسه آموزشی نمونه">
+        </label>
+        <label>وب‌سایت (اختیاری)
+          <input type="text" id="brandSiteInput" placeholder="www.example.com" dir="ltr">
+        </label>
+        <div>
+          <div class="brand-logo-row">
+            <img id="brandLogoPreview" src="__DEFAULT_LOGO__" alt="">
+            <button class="btn" id="brandLogoPick" type="button">انتخاب لوگو…</button>
+            <button class="btn" id="brandLogoReset" type="button">لوگوی پیش‌فرض</button>
+            <input type="file" id="brandLogoInput" accept="image/*" class="hidden">
+          </div>
+        </div>
+        <p class="brand-hint">این تنظیمات فقط در همین مرورگر ذخیره می‌شود و در چاپ و خروجی PNG هم دیده می‌شود.</p>
+      </div>
+      <div class="confirm-actions">
+        <button class="btn" id="brandCancel">انصراف</button>
+        <button class="btn primary" id="brandSave">ذخیره</button>
+      </div>
+    </div>
+  </div>
+
   <div id="uploadStage">
-    <h2>فایل main_sheet_ebi را بارگذاری کنید</h2>
+    <h2>فایل خروجی موتور وصول را بارگذاری کنید</h2>
     <p>هر بار که فایل خروجی موتور وصول را بارگذاری کنید، یک عکس فوری از وضعیت همان لحظه (بر اساس تاریخ واقعی سیستم شما) ذخیره می‌شود تا بشود روند واقعی هفته‌به‌هفته را دید.<br>داده‌ها فقط در همین مرورگر ذخیره می‌شوند.</p>
     <button class="btn primary" id="pickFileBtn2">انتخاب فایل Excel</button>
   </div>
@@ -379,7 +412,7 @@ tbody tr:hover{background:var(--paper);}
     </div>
 
     <div class="app-footer">
-      <span>www.mmrd.ir · موسسه راه دانش عارف</span>
+      <span id="brandFooter"></span>
       <span class="sig">توسعه‌دهنده: ابراهیم سلیمی</span>
     </div>
 

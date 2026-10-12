@@ -16,8 +16,15 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/4] Building the executable...
-pyinstaller --onefile --noconsole --name "receivables_management" app_desktop.py
+echo [2/4] Building the dashboard and the executable...
+python ..\dashboard-modiriati\build_dashboard.py
+if errorlevel 1 (
+    echo.
+    echo ERROR: Dashboard build failed. See the messages above.
+    pause
+    exit /b 1
+)
+pyinstaller --onefile --noconsole --name "receivables_management" --icon "app_icon.ico" app_desktop.py
 if errorlevel 1 (
     echo.
     echo ERROR: PyInstaller build failed.

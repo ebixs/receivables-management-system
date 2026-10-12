@@ -1,12 +1,19 @@
 # ============================================================
-# موتور عملیاتی وصول: احمدی → ابراهیم
-# نسخه ماژول (قابل فراخوانی از برنامه دسکتاپ)
+# Receivables reconciliation engine — موتور تطبیق وصول مطالبات
+# (public edition — نسخه‌ی عمومی)
 #
-# قوانین (بدون تغییر نسبت به نسخه اسکریپتی):
+# ورودی: یک فایل اکسل با دو شیت
+#   - Main sheet                   فهرست اصلی پیگیری (همان که به‌روز می‌شود)
+#   - Initial raw financial sheet  خروجی خام مالی (هرگز تغییر نمی‌کند)
+# (نام‌های قدیمی main_sheet_ebi / main_sheet_ahmadi هم پذیرفته می‌شوند.)
+#
+# قوانین:
 # - term یکتا
 # - تطبیق دقیق نرمال‌شده نام
 # - قرمز اولویت مطلق
-# - قرمز/نمایندگی بدون Coach معمولی (نمایندگی همیشه "آقای احمدی")
+# - قرمز بدون کارشناس؛ نمایندگی همیشه با کارشناس «مدیر» (Manager، قابل تنظیم)
+# - فرد عادی جدید هرگز بی‌کارشناس نمی‌ماند: کارشناس قبلی‌اش، وگرنه
+#   کارشناسی که کمترین تعداد دانشجو را دارد
 # - عدم overwrite برای term تکراری
 # - گزارش مغایرت
 # - خروجی در پوشه Excel کنار فایل ورودی، با تاریخ شمسی و ساعت در اسم فایل
@@ -26,12 +33,66 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
 
-def run_engine(source_file):
+# ============================================================
+# نام شیت‌ها (نسخه‌ی عمومی) و نام‌های قدیمی هم‌ارز
+# ============================================================
+
+MAIN_SHEET = "Main sheet"
+RAW_SHEET = "Initial raw financial sheet"
+NEW_ADDED_SHEET = "Newly added installments"
+MISMATCH_SHEET = "Manual review discrepancy"
+RED_SHEET = "Reds"
+CLEARED_SHEET = "Cleared checks"
+RED_LEGACY_SHEET = "red"
+
+LEGACY_SHEET_NAMES = {
+    MAIN_SHEET: ["main_sheet_ebi"],
+    RAW_SHEET: ["main_sheet_ahmadi"],
+    NEW_ADDED_SHEET: ["اقساط جدید اضافه شده"],
+    MISMATCH_SHEET: ["مغایرت بررسی دستی"],
+    RED_SHEET: ["قرمزها"],
+    CLEARED_SHEET: ["چک‌های پاس‌شده حذف‌شده"],
+}
+
+RED_STATUS = "قرمز"
+
+DEFAULT_SETTINGS = {
+    # کارشناس ثابت همه‌ی اعضای نمایندگی‌ها
+    "manager_name": "Manager",
+    # املاهای دیگرِ همان مدیر که باید با manager_name یکی شوند
+    "manager_aliases": [],
+}
+
+
+def resolve_settings(settings=None):
+    merged = dict(DEFAULT_SETTINGS)
+    for key, value in (settings or {}).items():
+        if value not in (None, ""):
+            merged[key] = value
+    merged["manager_name"] = str(merged["manager_name"]).strip() or DEFAULT_SETTINGS["manager_name"]
+    merged["manager_aliases"] = [
+        str(a).strip() for a in (merged.get("manager_aliases") or []) if str(a).strip()
+    ]
+    return merged
+
+
+def find_sheet(sheet_names, canonical):
+    """نام واقعی شیت در فایل (نام جدید یا یکی از نام‌های قدیمی)، یا None."""
+    for name in [canonical, *LEGACY_SHEET_NAMES.get(canonical, [])]:
+        for existing in sheet_names:
+            if existing.strip() == name:
+                return existing
+    return None
+
+
+def run_engine(source_file, settings=None):
     """
     اجرای کامل موتور تطبیق روی یک فایل اکسل مشخص.
 
     ورودی:
-        source_file: مسیر فایل اکسل ورودی (شامل شیت‌های main_sheet_ebi و main_sheet_ahmadi)
+        source_file: مسیر فایل اکسل ورودی (شامل شیت‌های Main sheet و
+                     Initial raw financial sheet، یا نام‌های قدیمی آن‌ها)
+        settings:    دیکشنری اختیاری؛ manager_name و manager_aliases
 
     خروجی: یک دیکشنری شامل
         output_file            مسیر کامل فایل خروجی ساخته‌شده
@@ -42,7 +103,10 @@ def run_engine(source_file):
         red_count               تعداد قرمز جدید
         representation_count    تعداد نمایندگی جدید
         coach_count             تعداد Coach عادی تخصیص‌یافته
+        auto_assigned_count     تعداد افراد جدید بی‌سابقه که کارشناس خودکار گرفتند
     """
+
+    SETTINGS = resolve_settings(settings)
 
     SOURCE_FILE = source_file
 
@@ -130,6 +194,7 @@ def run_engine(source_file):
         # ============================================================
 
         MASTER_COLS = [
+            "counter",
             "term",
             "telephone",
             "date",
@@ -138,8 +203,9 @@ def run_engine(source_file):
             "name_family",
             "status",
             "coach",
-            "counter",
         ]
+        TERM_IDX = MASTER_COLS.index("term")
+        NAME_IDX = MASTER_COLS.index("name_family")
 
 
         # ============================================================
@@ -226,7 +292,7 @@ def run_engine(source_file):
 
 
         # ============================================================
-        # تشخیص سطر عنوان (برای سازگاری با ظاهر جدید main_sheet_ebi)
+        # تشخیص سطر عنوان (برای سازگاری با ظاهر جدید Main sheet)
         # اگر این فایل قبلاً یک‌بار توسط همین اسکریپت استایل‌دهی شده
         # باشد، سطر ۱ یک عنوان merge‌شده است و هدر واقعی ستون‌ها در
         # سطر ۲ قرار دارد. این بخش فقط محل خواندن هدر را تشخیص می‌دهد
@@ -245,7 +311,20 @@ def run_engine(source_file):
                 probe_wb.close()
 
 
-        _ebi_has_title_row = _sheet_has_title_row(SOURCE_FILE, "main_sheet_ebi")
+        _probe = load_workbook(SOURCE_FILE, read_only=True)
+        _input_sheet_names = list(_probe.sheetnames)
+        _probe.close()
+
+        MAIN_IN = find_sheet(_input_sheet_names, MAIN_SHEET)
+        RAW_IN = find_sheet(_input_sheet_names, RAW_SHEET)
+        if MAIN_IN is None or RAW_IN is None:
+            raise ValueError(
+                "فایل ورودی باید دو شیت «" + MAIN_SHEET + "» و «" + RAW_SHEET + "» "
+                "(یا نام‌های قدیمی main_sheet_ebi و main_sheet_ahmadi) داشته باشد.\n"
+                "شیت‌های موجود: " + "، ".join(_input_sheet_names)
+            )
+
+        _ebi_has_title_row = _sheet_has_title_row(SOURCE_FILE, MAIN_IN)
 
 
         # ============================================================
@@ -254,13 +333,13 @@ def run_engine(source_file):
 
         ebi_raw = pd.read_excel(
             SOURCE_FILE,
-            sheet_name="main_sheet_ebi",
+            sheet_name=MAIN_IN,
             header=1 if _ebi_has_title_row else 0,
         )
 
         ahmadi_raw = pd.read_excel(
             SOURCE_FILE,
-            sheet_name="main_sheet_ahmadi"
+            sheet_name=RAW_IN
         )
 
 
@@ -286,7 +365,7 @@ def run_engine(source_file):
         ebi_terms = set(ebi.loc[ebi["term"] > 0, "term"])
         ahmadi_terms = set(ahmadi.loc[ahmadi["term"] > 0, "term"])
 
-        # قانون جدید: term غایب از احمدی باید از ابراهیم حذف شود
+        # term غایب از شیت خام مالی باید از Main sheet حذف شود (چک پاس شده)
         paid_terms = ebi_terms - ahmadi_terms
         new_terms = ahmadi_terms - ebi_terms
         common_terms = ebi_terms & ahmadi_terms
@@ -307,16 +386,15 @@ def run_engine(source_file):
         # ============================================================
         # شناسایی افراد قرمز و اعضای نمایندگی‌ها
         # - قرمز: status دقیقاً "قرمز" است.
-        # - نمایندگی: هر status غیرخالی و غیر از "قرمز" (مثل سیرجان یا هر
-        #   نام دیگری) — یعنی نام نمایندگی می‌تواند هر چیزی باشد، نه فقط
-        #   سیرجان.
+        # - نمایندگی: هر status غیرخالی و غیر از "قرمز" (مثل agency 1 یا هر
+        #   نام دیگری) — یعنی نام نمایندگی می‌تواند هر چیزی باشد.
         # این‌ها فقط از تاریخچه‌ی ebi خوانده می‌شوند: تغییر status همیشه
-        # دستی و در ebi انجام می‌شود، نه از فایل احمدی.
+        # دستی و در Main sheet انجام می‌شود، نه از شیت خام مالی.
         # ============================================================
 
         red_names = set(
             ebi.loc[
-                (ebi["_status"] == "قرمز")
+                (ebi["_status"] == RED_STATUS)
                 & (ebi["_name_norm"] != ""),
                 "_name_norm"
             ]
@@ -324,17 +402,28 @@ def run_engine(source_file):
 
         representation_by_name = {}
         for _name_norm, _group in ebi[ebi["_name_norm"] != ""].groupby("_name_norm"):
-            _rep_statuses = [s for s in _group["_status"] if s not in ("", "قرمز")]
+            _rep_statuses = [s for s in _group["_status"] if s not in ("", RED_STATUS)]
             if _rep_statuses:
                 representation_by_name[_name_norm] = _rep_statuses[0]
 
-        REPRESENTATION_COACH = "آقای احمدی"
+        REPRESENTATION_COACH = SETTINGS["manager_name"]
+        _manager_keys = {
+            normalize_name(n) for n in [REPRESENTATION_COACH, *SETTINGS["manager_aliases"]]
+        }
+
+        def _canonical_coach(value):
+            """هر املای مدیر (manager_name یا یکی از manager_aliases) → manager_name."""
+            if pd.isna(value):
+                return value
+            if normalize_name(value) in _manager_keys:
+                return REPRESENTATION_COACH
+            return value
 
 
         # ============================================================
         # محاسبه Coach مناسب برای هر فرد
         # فقط از رکوردهای «عادی» (بدون قرمز/نمایندگی) استفاده می‌شود؛
-        # در غیر این صورت کارشناس ثابت نمایندگی‌ها (آقای احمدی) وارد
+        # در غیر این صورت کارشناس ثابت نمایندگی‌ها (مدیر) وارد
         # محاسبه‌ی تخصیص کارشناسِ افراد عادی می‌شد.
         # ============================================================
 
@@ -386,6 +475,32 @@ def run_engine(source_file):
 
 
         # ============================================================
+        # کارشناس خودکار برای فرد عادیِ جدیدِ بی‌سابقه
+        # کاندیدها: همه‌ی کارشناس‌هایی که الان دانشجوی عادی دارند (مدیر جزو
+        # کاندیدها نیست). کمترین تعداد دانشجو برنده است؛ در تساوی، ترتیب
+        # الفبایی. شمارش بعد از هر تخصیص به‌روز می‌شود تا افراد جدید بین
+        # کارشناس‌ها پخش شوند.
+        # ============================================================
+
+        _expert_load = {
+            coach: count
+            for coach, count in coach_totals.items()
+            if normalize_name(coach) not in _manager_keys
+        }
+        _auto_assigned = {}
+
+        def _auto_expert_for(name_norm):
+            if name_norm in _auto_assigned:
+                return _auto_assigned[name_norm]
+            if not _expert_load:
+                return ""
+            chosen = min(_expert_load, key=lambda c: (_expert_load[c], c))
+            _expert_load[chosen] += 1
+            _auto_assigned[name_norm] = chosen
+            return chosen
+
+
+        # ============================================================
         # تعیین Status و Coach برای رکوردهای جدید
         # ============================================================
 
@@ -396,21 +511,22 @@ def run_engine(source_file):
 
             # قرمز: Status قرمز و Coach همیشه خالی (فقط با اصلاح دستی در ebi خارج می‌شود)
             if row["_name_norm"] in red_names:
-                new_rows.at[i, "status_final"] = "قرمز"
+                new_rows.at[i, "status_final"] = RED_STATUS
                 new_rows.at[i, "coach_final"] = ""
 
-            # نمایندگی (سیرجان یا هر نمایندگی دیگر): Status = نام نمایندگی، Coach = آقای احمدی
+            # نمایندگی (هر نام نمایندگی): Status = نام نمایندگی، Coach = مدیر
             elif row["_name_norm"] in representation_by_name:
                 new_rows.at[i, "status_final"] = representation_by_name[row["_name_norm"]]
                 new_rows.at[i, "coach_final"] = REPRESENTATION_COACH
 
-            # سایر افراد (status خالی): تخصیص Coach بر اساس سابقه
+            # سایر افراد (status خالی): تخصیص Coach بر اساس سابقه؛
+            # اگر سابقه ندارد، کارشناس خودکار (هرگز بی‌کارشناس نمی‌ماند)
             else:
                 new_rows.at[i, "status_final"] = ""
-                new_rows.at[i, "coach_final"] = coach_choice.get(
-                    row["_name_norm"],
-                    ""
-                )
+                _choice = coach_choice.get(row["_name_norm"], "")
+                if not _choice and row["_name_norm"] != "":
+                    _choice = _auto_expert_for(row["_name_norm"])
+                new_rows.at[i, "coach_final"] = _choice
 
 
         # ============================================================
@@ -460,7 +576,7 @@ def run_engine(source_file):
 
             for field in compare_fields:
 
-                # اگر Status یا Coach در احمدی خالی باشد،
+                # اگر Status یا Coach در شیت خام خالی باشد،
                 # تغییر محسوب نمی‌شود.
                 if (
                     field in ("status", "coach")
@@ -469,13 +585,9 @@ def run_engine(source_file):
                     continue
 
                 if field == "coach":
-                    # تفاوت صرفاً املایی «اقای احمدی»/«آقای احمدی» مغایرت واقعی نیست
-                    e_val = e[field]
-                    a_val = a[field]
-                    if normalize_name(e_val) == normalize_name("اقای احمدی"):
-                        e_val = REPRESENTATION_COACH
-                    if normalize_name(a_val) == normalize_name("اقای احمدی"):
-                        a_val = REPRESENTATION_COACH
+                    # تفاوت صرفاً املایی نام مدیر (manager_aliases) مغایرت واقعی نیست
+                    e_val = _canonical_coach(e[field])
+                    a_val = _canonical_coach(a[field])
                     if not field_equal(e_val, a_val, field):
                         diffs.append(field)
                     continue
@@ -518,17 +630,28 @@ def run_engine(source_file):
                         return r
             return 1
 
+        # نام‌های قدیمی شیت‌ها در خروجی به نام‌های عمومی تغییر می‌کنند
+        # (فقط نام تب؛ محتوای شیت خام دست نمی‌خورد)
+        for _canonical in LEGACY_SHEET_NAMES:
+            _actual = find_sheet(wb.sheetnames, _canonical)
+            if _actual is not None and _actual != _canonical and _canonical not in wb.sheetnames:
+                wb[_actual].title = _canonical
+
         paid_columns = [
-            "term", "name_family", "telephone", "date", "price_of_mounth",
-            "reason", "تاریخ ثبت",
+            "counter", "term", "name_family", "telephone", "date", "price_of_mounth",
+            "reason", "registered_at",
         ]
+        _PAID_HEADER_ALIASES = {"تاریخ ثبت": "registered_at"}
 
         _paid_history_rows = []
-        if "چک‌های پاس‌شده حذف‌شده" in wb.sheetnames:
-            _existing_ws = wb["چک‌های پاس‌شده حذف‌شده"]
+        if CLEARED_SHEET in wb.sheetnames:
+            _existing_ws = wb[CLEARED_SHEET]
             _hdr_row = _find_header_row_generic(_existing_ws, "term")
             _headers = [
-                (_existing_ws.cell(_hdr_row, c).value or "")
+                _PAID_HEADER_ALIASES.get(
+                    str(_existing_ws.cell(_hdr_row, c).value or "").strip(),
+                    str(_existing_ws.cell(_hdr_row, c).value or "").strip(),
+                )
                 for c in range(1, _existing_ws.max_column + 1)
             ]
             for r in range(_hdr_row + 1, _existing_ws.max_row + 1):
@@ -539,8 +662,8 @@ def run_engine(source_file):
                 if all(v is None for v in _vals):
                     continue
                 _paid_history_rows.append(dict(zip(_headers, _vals)))
-            _paid_sheet_position = wb.sheetnames.index("چک‌های پاس‌شده حذف‌شده")
-            del wb["چک‌های پاس‌شده حذف‌شده"]
+            _paid_sheet_position = wb.sheetnames.index(CLEARED_SHEET)
+            del wb[CLEARED_SHEET]
         else:
             _paid_sheet_position = None
 
@@ -554,8 +677,8 @@ def run_engine(source_file):
                 "telephone": row.get("telephone"),
                 "date": row.get("date"),
                 "price_of_mounth": row.get("price_of_mounth"),
-                "reason": "term در main_sheet_ahmadi وجود ندارد؛ حذف از EBI",
-                "تاریخ ثبت": _registered_at,
+                "reason": f"term not in {RAW_SHEET}; removed from {MAIN_SHEET}",
+                "registered_at": _registered_at,
             })
 
         _seen_paid_terms = set()
@@ -568,9 +691,9 @@ def run_engine(source_file):
             _all_paid_rows.append(_r)
 
         if _paid_sheet_position is not None:
-            ws_paid = wb.create_sheet("چک‌های پاس‌شده حذف‌شده", _paid_sheet_position)
+            ws_paid = wb.create_sheet(CLEARED_SHEET, _paid_sheet_position)
         else:
-            ws_paid = wb.create_sheet("چک‌های پاس‌شده حذف‌شده")
+            ws_paid = wb.create_sheet(CLEARED_SHEET)
 
         for col_idx, col_name in enumerate(paid_columns, 1):
             ws_paid.cell(1, col_idx).value = col_name
@@ -583,7 +706,7 @@ def run_engine(source_file):
                 ws_paid.cell(row_idx, col_idx).value = value
 
 
-        ws = wb["main_sheet_ebi"]
+        ws = wb[MAIN_SHEET]
 
 
         # ============================================================
@@ -592,18 +715,18 @@ def run_engine(source_file):
 
         if not ws.tables:
             raise ValueError(
-                "در شیت main_sheet_ebi هیچ جدول Excel پیدا نشد."
+                f"در شیت «{MAIN_SHEET}» هیچ جدول Excel (Table) پیدا نشد."
             )
 
         table = next(iter(ws.tables.values()))
 
-        # سطر هدر واقعی main_sheet_ebi: اگر سطر عنوان از قبل وجود دارد سطر ۲،
+        # سطر هدر واقعی Main sheet: اگر سطر عنوان از قبل وجود دارد سطر ۲،
         # در غیر این صورت (اولین اجرا روی فایل خام) سطر ۱.
         # این فقط محل نوشتن/خواندن را مشخص می‌کند و هیچ اثری روی منطق ندارد.
         EBI_HEADER_ROW = 2 if _ebi_has_title_row else 1
 
 
-        # بازسازی کامل main_sheet_ebi طبق لیست احمدی
+        # بازسازی کامل Main sheet طبق شیت خام مالی
         existing_ebi = ebi[ebi["term"] > 0].copy()
         kept_ebi = existing_ebi[existing_ebi["term"].isin(common_terms)].copy()
         kept_ebi = kept_ebi.drop_duplicates("term", keep="first")
@@ -614,24 +737,17 @@ def run_engine(source_file):
             ignore_index=True
         )
 
-        # یکسان‌سازی املای «آقای احمدی» در همه‌جا (فقط املای متن؛ منطق تطبیق دست‌نخورده)
-        _ahmadi_spelling_keys = {
-            normalize_name("اقای احمدی"),
-            normalize_name("آقای احمدی"),
-        }
-
-        def _normalize_coach_spelling(value):
-            if pd.isna(value):
-                return value
-            if normalize_name(value) in _ahmadi_spelling_keys:
-                return REPRESENTATION_COACH
-            return value
-
-        final_ebi["coach"] = final_ebi["coach"].map(_normalize_coach_spelling)
+        # یکسان‌سازی املای نام مدیر در همه‌جا (فقط املای متن؛ منطق تطبیق دست‌نخورده)
+        final_ebi["coach"] = final_ebi["coach"].map(_canonical_coach)
 
         # حذف تمام ردیف‌های قبلی و نوشتن فقط ردیف‌های مجاز
         if ws.max_row > EBI_HEADER_ROW:
             ws.delete_rows(EBI_HEADER_ROW + 1, ws.max_row - EBI_HEADER_ROW)
+
+        # هدر به ترتیب استاندارد (counter اول، بعد term) — ستون‌ها بر اساس
+        # همین ترتیب نوشته می‌شوند، پس فایل‌های قدیمی (counter آخر) هم درست می‌شوند
+        for column_index, column_name in enumerate(MASTER_COLS, 1):
+            ws.cell(EBI_HEADER_ROW, column_index).value = column_name
 
         for _, row in final_ebi.iterrows():
             excel_row = ws.max_row + 1
@@ -676,14 +792,14 @@ def run_engine(source_file):
             values = item[0]
 
             name_value = (
-                values[5]
-                if len(values) > 5
+                values[NAME_IDX]
+                if len(values) > NAME_IDX
                 else ""
             )
 
             term_value = (
-                values[0]
-                if len(values) > 0
+                values[TERM_IDX]
+                if len(values) > TERM_IDX
                 else 0
             )
 
@@ -736,27 +852,33 @@ def run_engine(source_file):
 
 
         # ============================================================
-        # بازسازی کامل شیت‌های ثانویه — هر بار از روی نتیجه‌ی نهایی شیت ابراهیم
-        #   • کارشناسان (یک شیت برای هر کارشناس، از جمله «آقای احمدی»)
+        # بازسازی کامل شیت‌های ثانویه — هر بار از روی نتیجه‌ی نهایی Main sheet
+        #   • کارشناسان (یک شیت برای هر کارشناس، از جمله مدیر)
         #   • قرمزها و red
-        #   • نمایندگی‌ها (سیرجان یا هر نام دیگر)
-        #   • اقساط جدید اضافه شده / مغایرت بررسی دستی
+        #   • نمایندگی‌ها (هر نامی که در ستون status آمده باشد)
+        #   • Newly added installments / Manual review discrepancy
         # این شیت‌ها فقط نمایی از نتیجه‌ی همین اجرا هستند و هر بار از نو ساخته
         # می‌شوند؛ جایگاه تب‌ها حفظ می‌شود. هیچ اثری روی منطق تطبیق بالا ندارد.
-        # (شیت «چک‌های پاس‌شده حذف‌شده» جداست و تاریخچه‌ی تجمعی است.)
+        # (شیت «Cleared checks» جداست و تاریخچه‌ی تجمعی است.)
         # ============================================================
 
-        _PAID_SHEET = "چک‌های پاس‌شده حذف‌شده"
-        _NEW_ADDED_SHEET = "اقساط جدید اضافه شده"
-        _MISMATCH_SHEET = "مغایرت بررسی دستی"
-        _RED_SHEET = "قرمزها"
-        _RED_LEGACY_SHEET = "red"
+        _PAID_SHEET = CLEARED_SHEET
+        _NEW_ADDED_SHEET = NEW_ADDED_SHEET
+        _MISMATCH_SHEET = MISMATCH_SHEET
+        _RED_SHEET = RED_SHEET
+        _RED_LEGACY_SHEET = RED_LEGACY_SHEET
         _RESERVED_SHEETS = {
-            "main_sheet_ebi", "main_sheet_ahmadi", _PAID_SHEET,
+            MAIN_SHEET, RAW_SHEET, _PAID_SHEET,
             _NEW_ADDED_SHEET, _MISMATCH_SHEET, _RED_SHEET, _RED_LEGACY_SHEET,
         }
+        for _legacy_list in LEGACY_SHEET_NAMES.values():
+            _RESERVED_SHEETS.update(_legacy_list)
         # نام‌های قدیمی هم‌ارز که باید در همان جایگاه با نام درست جایگزین شوند
-        _SHEET_ALIASES = {REPRESENTATION_COACH: ["اقای احمدی"]}
+        _SHEET_ALIASES = {
+            REPRESENTATION_COACH: [
+                a for a in SETTINGS["manager_aliases"] if a != REPRESENTATION_COACH
+            ]
+        }
         _RED_LEGACY_DEFAULT_LABELS = [
             "ردیف", "تاریخ دریافت", "تاریخ", "مبلغ", "مقطع", "نام و نام خانوادگی", "وضعیت",
         ]
@@ -843,7 +965,7 @@ def run_engine(source_file):
         _final_coach = final_ebi["coach"].fillna("").astype(str).str.strip()
 
         # ---- قرمزها ----
-        _red_df = final_ebi[_final_status == "قرمز"]
+        _red_df = final_ebi[_final_status == RED_STATUS]
         _replace_sheet(_RED_SHEET, MASTER_COLS, _records_for(_red_df, MASTER_COLS))
         _sheet_report.append((_RED_SHEET, len(_red_df)))
 
@@ -853,7 +975,9 @@ def run_engine(source_file):
             if not _red_labels or len(_red_labels) != 7:
                 _red_labels = _RED_LEGACY_DEFAULT_LABELS
             _replace_sheet(
-                _RED_LEGACY_SHEET, _red_labels, _records_for(_red_df, MASTER_COLS[:7])
+                _RED_LEGACY_SHEET, _red_labels,
+                _records_for(_red_df, ["term", "telephone", "date", "price_of_mounth",
+                                       "state", "name_family", "status"])
             )
             _sheet_report.append((_RED_LEGACY_SHEET, len(_red_df)))
 
@@ -861,8 +985,8 @@ def run_engine(source_file):
         _new_added_df = final_ebi[final_ebi["term"].isin(set(new_master["term"]))]
         _replace_sheet(
             _NEW_ADDED_SHEET,
-            ["نوع عملیات"] + MASTER_COLS,
-            [["افزودن به main_sheet_ebi"] + rec for rec in _records_for(_new_added_df, MASTER_COLS)],
+            MASTER_COLS + ["operation"],
+            [rec + [f"Added to {MAIN_SHEET}"] for rec in _records_for(_new_added_df, MASTER_COLS)],
         )
         _sheet_report.append((_NEW_ADDED_SHEET, len(_new_added_df)))
 
@@ -891,20 +1015,22 @@ def run_engine(source_file):
             ])
         _replace_sheet(
             _MISMATCH_SHEET,
-            ["term", "ebi_name_family", "ahmadi_name_family", "different_fields",
-             "ebi_telephone", "ahmadi_telephone", "ebi_name", "ahmadi_name"],
+            ["term", "main_name_family", "raw_name_family", "different_fields",
+             "main_telephone", "raw_telephone", "main_name", "raw_name"],
             _mismatch_records,
         )
         _sheet_report.append((_MISMATCH_SHEET, len(_mismatch_records)))
 
         # ---- نمایندگی‌ها: یک شیت برای هر status غیرخالی و غیر از قرمز ----
-        _rep_names = sorted(s for s in _final_status.unique() if s not in ("", "قرمز"))
+        _rep_names = sorted(s for s in _final_status.unique() if s not in ("", RED_STATUS))
+        _agency_sheets = set()
         for _rep in _rep_names:
             _rep_df = final_ebi[_final_status == _rep]
             _rep_sheet = _safe_sheet_name(_rep)
             if _rep_sheet in _written_names or _rep_sheet in _RESERVED_SHEETS:
                 _rep_sheet = _unique_sheet_name(_rep_sheet)
             _replace_sheet(_rep_sheet, MASTER_COLS, _records_for(_rep_df, MASTER_COLS))
+            _agency_sheets.add(_rep_sheet)
             _sheet_report.append((_rep_sheet, len(_rep_df)))
 
         # ---- کارشناسان: یک شیت برای هر کارشناس (بر اساس ستون coach) ----
@@ -955,10 +1081,10 @@ def run_engine(source_file):
             f"مغایرت‌های نیازمند بررسی دستی: {len(mismatch_df)}"
         )
 
-        red_count = (new_master["status"] == "قرمز").sum()
+        red_count = (new_master["status"] == RED_STATUS).sum()
         representation_count = (
             (new_master["status"] != "")
-            & (new_master["status"] != "قرمز")
+            & (new_master["status"] != RED_STATUS)
         ).sum()
         coach_count = (
             (new_master["status"] == "")
@@ -970,11 +1096,15 @@ def run_engine(source_file):
             f"نمایندگی جدید: {representation_count} | "
             f"Coach عادی تخصیص‌یافته: {coach_count}"
         )
+        if _auto_assigned:
+            print(f"  - از این تعداد، {len(_auto_assigned)} نفر بی‌سابقه بودند و کارشناس خودکار گرفتند:")
+            for _expert, _n in pd.Series(list(_auto_assigned.values())).value_counts().sort_index().items():
+                print(f"      {_expert}: {_n} نفر")
 
         if representation_count:
             rep_breakdown = (
                 new_master.loc[
-                    (new_master["status"] != "") & (new_master["status"] != "قرمز"),
+                    (new_master["status"] != "") & (new_master["status"] != RED_STATUS),
                     "status",
                 ]
                 .value_counts()
@@ -991,7 +1121,7 @@ def run_engine(source_file):
         )
 
         print()
-        print("شیت‌های ثانویه از روی نتیجه‌ی نهایی شیت ابراهیم به‌روز شدند:")
+        print(f"شیت‌های ثانویه از روی نتیجه‌ی نهایی «{MAIN_SHEET}» به‌روز شدند:")
         for _name, _count in _sheet_report:
             print(f"  - {_name}: {_count} رکورد")
         for _name in _emptied_sheets:
@@ -1006,25 +1136,27 @@ def run_engine(source_file):
         # ============================================================
         # استایل‌دهی ظاهری خروجی
         # (فقط ظاهر؛ هیچ اثری روی منطق تطبیق/محاسبات بالا ندارد)
-        # روی همه شیت‌ها اجرا می‌شود، به‌جز main_sheet_ahmadi که باید
+        # روی همه شیت‌ها اجرا می‌شود، به‌جز شیت خام مالی که باید
         # کاملاً دست‌نخورده بماند.
         # ============================================================
 
         SHEET_TITLE_TRANSLATIONS = {
-            "main_sheet_ebi": "فهرست ابراهیم",
-            "red": "قرمزها",
+            RED_LEGACY_SHEET: "Reds (legacy)",
         }
 
         STYLE_FONT_NAME = "B Nazanin"
         STYLE_FONT_SIZE = 12
         NUMERIC_FONT_NAME = "Tahoma"
         NUMERIC_FONT_SIZE = 11
-        NUMERIC_COLUMN_NAMES = {"term", "telephone", "date", "price_of_mounth"}
+        NUMERIC_COLUMN_NAMES = {"counter", "term", "telephone", "date", "price_of_mounth"}
+
+        TITLE_ROW_HEIGHT = 30   # فونت عنوان ۲۸ است؛ با ۲۰ بریده می‌شود
+        ROW_HEIGHT = 20         # هدر و همه‌ی سطرهای داده
 
         TITLE_FILL = PatternFill("solid", fgColor="1F4E78")
         HEADER_FILL = PatternFill("solid", fgColor="2E75B6")
         RED_ROW_FILL = PatternFill("solid", fgColor="FFC7CE")
-        SIRJAN_ROW_FILL = PatternFill("solid", fgColor="BDD7EE")
+        AGENCY_ROW_FILL = PatternFill("solid", fgColor="BDD7EE")
         CENTER_ALIGN = Alignment(horizontal="center", vertical="center")
 
 
@@ -1032,6 +1164,67 @@ def run_engine(source_file):
             if column_name in NUMERIC_COLUMN_NAMES:
                 return Font(name=NUMERIC_FONT_NAME, size=NUMERIC_FONT_SIZE)
             return Font(name=STYLE_FONT_NAME, size=STYLE_FONT_SIZE)
+
+
+        def _display_len(value, column_name):
+            """طول تقریبی متن نمایش‌داده‌شده (با قالب عددی) برای Auto-fit."""
+            if value is None:
+                return 0
+            if column_name == "price_of_mounth":
+                try:
+                    return len(f"{float(value):,.0f}") + 5   # «ريال 40,000,000»
+                except (TypeError, ValueError):
+                    pass
+            if column_name == "telephone":
+                return 14                                    # «(912) 604-8258»
+            if isinstance(value, datetime):
+                return 10
+            return len(str(value))
+
+
+        def _counter_first(ws, header_row_idx):
+            """
+            ستون counter را اول و term را دوم می‌گذارد (اگر counter نیست، اضافه
+            می‌شود) و داخلش شماره‌ی ردیف ۱، ۲، ۳، ... می‌نویسد — به همان ترتیبی
+            که سطرها در شیت دیده می‌شوند. فقط جای ستون‌ها و شماره‌ی ردیف؛
+            هیچ مقدار دیگری عوض نمی‌شود.
+            """
+            max_col = ws.max_column
+            max_row = ws.max_row
+            headers = [ws.cell(header_row_idx, c).value for c in range(1, max_col + 1)]
+            while headers and headers[-1] is None:
+                headers.pop()
+            if not headers:
+                return
+            names = [str(h).strip().lower() if h is not None else "" for h in headers]
+
+            order = list(range(len(headers)))
+            counter_idx = names.index("counter") if "counter" in names else None
+            term_idx = names.index("term") if "term" in names else None
+            front = [i for i in (counter_idx, term_idx) if i is not None]
+            order = front + [i for i in order if i not in front]
+
+            grid = [
+                [ws.cell(r, c + 1).value for c in range(len(headers))]
+                for r in range(header_row_idx, max_row + 1)
+            ]
+            new_grid = [[row[i] for i in order] for row in grid]
+            if counter_idx is None:
+                new_grid = [["counter"] + new_grid[0]] + [[None] + row for row in new_grid[1:]]
+
+            # شماره‌ی ردیف فقط برای سطرهایی که داده دارند
+            n = 0
+            for row in new_grid[1:]:
+                if any(v not in (None, "") for v in row[1:]):
+                    n += 1
+                    row[0] = n
+                else:
+                    row[0] = None
+
+            width = max(len(r) for r in new_grid)
+            for r_off, row in enumerate(new_grid):
+                for c in range(width):
+                    ws.cell(header_row_idx + r_off, c + 1).value = row[c] if c < len(row) else None
 
 
         def style_sheet_appearance(ws, sheet_key):
@@ -1046,32 +1239,43 @@ def run_engine(source_file):
             if not has_title:
                 ws.insert_rows(1)
 
-            max_col = ws.max_column
-            max_row = ws.max_row
             header_row_idx = 2  # هدر ستون‌ها همیشه سطر ۲ است، داده از سطر ۳
 
+            # جدول قبلی قبل از جابه‌جایی ستون‌ها حذف می‌شود (بعداً از نو ساخته می‌شود)
+            for existing_table_name in list(ws.tables.keys()):
+                del ws.tables[existing_table_name]
+            for mr in list(ws.merged_cells.ranges):
+                if mr.min_row == 1 and mr.max_row == 1:
+                    ws.unmerge_cells(str(mr))
+
+            _counter_first(ws, header_row_idx)
+
+            max_col = ws.max_column
+            max_row = ws.max_row
+
             header_values = [ws.cell(header_row_idx, c).value for c in range(1, max_col + 1)]
+            while header_values and header_values[-1] is None:
+                header_values.pop()
+            max_col = max(len(header_values), 1)
             header_map = {}
             for idx, h in enumerate(header_values, start=1):
                 if h is not None:
                     header_map[str(h).strip().lower()] = idx
 
             # --- سطر ۱: عنوان merge‌شده ---
-            for mr in list(ws.merged_cells.ranges):
-                if mr.min_row == 1 and mr.max_row == 1:
-                    ws.unmerge_cells(str(mr))
             ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max_col)
             title_cell = ws.cell(1, 1)
             title_cell.value = SHEET_TITLE_TRANSLATIONS.get(sheet_key, sheet_key)
             title_cell.font = Font(name="B Nazanin", size=28, bold=True, color="FFFFFF")
             title_cell.fill = TITLE_FILL
             title_cell.alignment = CENTER_ALIGN
-            ws.row_dimensions[1].height = 30
+            ws.row_dimensions[1].height = TITLE_ROW_HEIGHT
             for c in range(1, max_col + 1):
                 ws.cell(1, c).alignment = CENTER_ALIGN
                 ws.cell(1, c).fill = TITLE_FILL
 
             # --- سطر ۲: هدر ستون‌ها ---
+            ws.row_dimensions[header_row_idx].height = ROW_HEIGHT
             for c in range(1, max_col + 1):
                 cell = ws.cell(header_row_idx, c)
                 col_name = str(cell.value).strip().lower() if cell.value is not None else ""
@@ -1082,47 +1286,50 @@ def run_engine(source_file):
 
             # --- سطرهای داده ---
             status_col = header_map.get("status")
-            forced_status = None
-            if "قرمز" in sheet_key:
-                forced_status = "قرمز"
-            elif "سیرجان" in sheet_key:
-                forced_status = "سیرجان"
+            forced_kind = None
+            if sheet_key in (RED_SHEET, RED_LEGACY_SHEET):
+                forced_kind = "red"
+            elif sheet_key in _agency_sheets:
+                forced_kind = "agency"
 
             for r in range(header_row_idx + 1, max_row + 1):
-                row_status = forced_status
-                if row_status is None and status_col:
+                ws.row_dimensions[r].height = ROW_HEIGHT
+
+                row_kind = forced_kind
+                if row_kind is None and status_col:
                     val = ws.cell(r, status_col).value
                     row_status = str(val).strip() if val is not None else ""
+                    if row_status == RED_STATUS:
+                        row_kind = "red"
+                    elif row_status != "":
+                        row_kind = "agency"   # هر status غیرخالی غیر از قرمز = نمایندگی
 
                 row_fill = None
-                if row_status == "قرمز":
+                if row_kind == "red":
                     row_fill = RED_ROW_FILL
-                elif row_status == "سیرجان":
-                    row_fill = SIRJAN_ROW_FILL
+                elif row_kind == "agency":
+                    row_fill = AGENCY_ROW_FILL
 
                 for c in range(1, max_col + 1):
                     cell = ws.cell(r, c)
                     col_name = str(header_values[c - 1]).strip().lower() if header_values[c - 1] is not None else ""
                     cell.font = _column_font(col_name)
                     cell.alignment = CENTER_ALIGN
-                    if row_fill is not None:
-                        cell.fill = row_fill
+                    cell.fill = row_fill if row_fill is not None else PatternFill(fill_type=None)
 
                     if col_name == "price_of_mounth":
                         cell.number_format = '"ريال" #,##0'
                     elif col_name == "telephone":
                         cell.number_format = '"("000") "000"-"0000'
 
-            # --- عرض ستون‌ها (Auto-fit تقریبی) ---
+            # --- عرض ستون‌ها: Auto-fit بر اساس طولانی‌ترین مقدار هر ستون ---
             for c in range(1, max_col + 1):
                 col_letter = get_column_letter(c)
+                col_name = str(header_values[c - 1]).strip().lower() if header_values[c - 1] is not None else ""
                 max_len = 0
-                for r in range(1, max_row + 1):
-                    v = ws.cell(r, c).value
-                    if v is None:
-                        continue
-                    max_len = max(max_len, len(str(v)))
-                ws.column_dimensions[col_letter].width = min(max(max_len + 4, 10), 40)
+                for r in range(header_row_idx, max_row + 1):   # عنوان merge‌شده حساب نمی‌شود
+                    max_len = max(max_len, _display_len(ws.cell(r, c).value, col_name))
+                ws.column_dimensions[col_letter].width = min(max(max_len * 1.2 + 4, 8), 70)
 
             # --- فریز سطر ۱ و ۲ ---
             ws.freeze_panes = "A3"
@@ -1130,9 +1337,6 @@ def run_engine(source_file):
             # --- جدول اکسل (Table) با استایل ساده و بدون راه‌راه ---
             data_row_count = max_row - header_row_idx
             if data_row_count >= 1:
-                for existing_table_name in list(ws.tables.keys()):
-                    del ws.tables[existing_table_name]
-
                 table_ref = f"A{header_row_idx}:{get_column_letter(max_col)}{max_row}"
                 safe_core = re.sub(r"[^A-Za-z0-9_]", "", sheet_key) or "sheet"
                 safe_name = f"tbl_{_table_index[0]}_{safe_core}"[:30]
@@ -1151,8 +1355,8 @@ def run_engine(source_file):
         _table_index = [1]
 
         for _sheet_name in wb.sheetnames:
-            if _sheet_name == "main_sheet_ahmadi":
-                continue
+            if _sheet_name == RAW_SHEET:
+                continue   # شیت خام مالی کاملاً دست‌نخورده می‌ماند
             style_sheet_appearance(wb[_sheet_name], _sheet_name)
 
 
@@ -1176,6 +1380,7 @@ def run_engine(source_file):
         "red_count": int(red_count),
         "representation_count": int(representation_count),
         "coach_count": int(coach_count),
+        "auto_assigned_count": len(_auto_assigned),
         "paid_new_count": len(_new_paid_rows),
         "paid_history_total": len(_all_paid_rows),
     }

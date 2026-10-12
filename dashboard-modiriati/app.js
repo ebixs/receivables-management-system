@@ -1,4 +1,6 @@
-const MASTER_COLS = ["term","telephone","date","price_of_mounth","state","name_family","status","coach","counter"];
+const MASTER_COLS = ["counter","term","telephone","date","price_of_mounth","state","name_family","status","coach"];
+// نام شیت اصلی در خروجی موتور (نسخه‌ی عمومی) + نام قدیمی برای فایل‌های قبلی
+const MAIN_SHEET_NAMES = ["Main sheet","main_sheet_ebi"];
 const REP_PALETTE = ["#0080C0","#F0B400","#2F9E6E","#8B5FBF","#5C6B7A","#C85A3F","#1F8FA3","#B0862E"];
 
 let CURRENT_SNAPSHOT = null;   // aggregated stats for the just-parsed file
@@ -690,9 +692,11 @@ async function handleFile(file){
     try{
       const data = new Uint8Array(e.target.result);
       const wb = XLSX.read(data, {type:"array", cellDates:true});
-      const sheetName = wb.SheetNames.find(n=>n.trim()==="main_sheet_ebi");
+      const sheetName = MAIN_SHEET_NAMES
+        .map(name=>wb.SheetNames.find(n=>n.trim()===name))
+        .find(Boolean);
       if(!sheetName){
-        showError("شیت main_sheet_ebi در این فایل پیدا نشد.");
+        showError("شیت «Main sheet» در این فایل پیدا نشد. فایل خروجی موتور وصول را بارگذاری کنید.");
         return;
       }
       if(typeof Chart === "undefined"){
@@ -701,7 +705,7 @@ async function handleFile(file){
       }
       const rows = loadEbiRows(wb.Sheets[sheetName]);
       if(rows.length===0){
-        showError("هیچ رکورد معتبری (با term بزرگ‌تر از صفر) در شیت main_sheet_ebi پیدا نشد. لطفاً نام ستون‌ها (term, price_of_mounth, ...) را در فایل بررسی کنید.");
+        showError("هیچ رکورد معتبری (با term بزرگ‌تر از صفر) در شیت «"+sheetName+"» پیدا نشد. لطفاً نام ستون‌ها (term, price_of_mounth, ...) را در فایل بررسی کنید.");
         return;
       }
       CURRENT_ROWS = rows;
@@ -742,6 +746,88 @@ document.querySelectorAll(".compare-btn").forEach(btn=>{
     if(ALL_SNAPSHOTS.length) render();
   });
 });
+
+/* ---------------- brand settings (org name / website / logo) — stored in this browser ---------------- */
+const BRAND_KEY = "wosool_brand";
+const DEFAULT_LOGO = document.getElementById("brandLogo").getAttribute("src");
+const DEFAULT_ORG = document.getElementById("brandOrg").textContent;
+let BRAND_DRAFT_LOGO = null;
+
+function loadBrand(){
+  try{ return JSON.parse(localStorage.getItem(BRAND_KEY)) || {}; }catch(e){ return {}; }
+}
+function applyBrand(){
+  const b = loadBrand();
+  const org = cleanText(b.org);
+  const site = cleanText(b.site);
+  document.getElementById("brandOrg").textContent = org || DEFAULT_ORG;
+  document.getElementById("brandLogo").src = b.logo || DEFAULT_LOGO;
+  document.getElementById("brandFooter").textContent = [site, org].filter(Boolean).join(" · ");
+  document.title = "ماشین وصول مطالبات" + (org ? " · " + org : "");
+}
+function openBrandBox(){
+  const b = loadBrand();
+  document.getElementById("brandOrgInput").value = b.org || "";
+  document.getElementById("brandSiteInput").value = b.site || "";
+  BRAND_DRAFT_LOGO = b.logo || null;
+  document.getElementById("brandLogoPreview").src = BRAND_DRAFT_LOGO || DEFAULT_LOGO;
+  document.getElementById("brandBox").classList.remove("hidden");
+}
+function closeBrandBox(){ document.getElementById("brandBox").classList.add("hidden"); }
+
+// لوگو قبل از ذخیره کوچک می‌شود تا حافظه‌ی مرورگر پر نشود
+function shrinkImage(file, maxSize){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onerror = ()=>reject(new Error("خواندن تصویر ناموفق بود"));
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onerror = ()=>reject(new Error("فرمت تصویر پشتیبانی نمی‌شود"));
+      img.onload = ()=>{
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width*scale));
+        canvas.height = Math.max(1, Math.round(img.height*scale));
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById("brandBtn").addEventListener("click", openBrandBox);
+document.getElementById("brandCancel").addEventListener("click", closeBrandBox);
+document.getElementById("brandLogoPick").addEventListener("click", ()=>document.getElementById("brandLogoInput").click());
+document.getElementById("brandLogoReset").addEventListener("click", ()=>{
+  BRAND_DRAFT_LOGO = null;
+  document.getElementById("brandLogoPreview").src = DEFAULT_LOGO;
+});
+document.getElementById("brandLogoInput").addEventListener("change", e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  shrinkImage(file, 256).then(dataUrl=>{
+    BRAND_DRAFT_LOGO = dataUrl;
+    document.getElementById("brandLogoPreview").src = dataUrl;
+  }).catch(err=>showError("خطا در لوگو: "+err.message));
+  e.target.value = "";
+});
+document.getElementById("brandSave").addEventListener("click", ()=>{
+  const data = {
+    org: document.getElementById("brandOrgInput").value.trim(),
+    site: document.getElementById("brandSiteInput").value.trim(),
+    logo: BRAND_DRAFT_LOGO
+  };
+  try{
+    localStorage.setItem(BRAND_KEY, JSON.stringify(data));
+  }catch(e){
+    showError("ذخیره‌ی تنظیمات برند ناموفق بود (حافظه‌ی مرورگر پر است یا ذخیره‌سازی غیرفعال است).");
+  }
+  applyBrand();
+  closeBrandBox();
+});
+try{ applyBrand(); }catch(e){ /* storage unavailable: defaults stay */ }
 
 /* ---------------- init: load history on open ---------------- */
 (function init(){

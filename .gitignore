@@ -1,14 +1,30 @@
+# Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
 env/
+
+# Build output
 build/
 dist/
 release/
+*.spec
+
+# Real data — never commit customer files
 Excel/
 *.xlsx
 *.xls
-*.json
+*.xlsm
+!sample/sample_input.xlsx
+
+# Local settings created by the desktop app
+python/settings.json
+python/app_config.json
+python/brand/
+settings.json
+app_config.json
+
+# OS
 .DS_Store
 Thumbs.db
