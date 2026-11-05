@@ -10,6 +10,16 @@
 
 **Developer / توسعه‌دهنده: Ebrahim Salimi — ابراهیم سلیمی** · MIT License
 
+![Python](https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white)
+![pandas](https://img.shields.io/badge/pandas-engine-150458?logo=pandas&logoColor=white)
+![Chart.js](https://img.shields.io/badge/Chart.js-dashboard-FF6384?logo=chartdotjs&logoColor=white)
+![Windows exe](https://img.shields.io/badge/Windows-.exe%20build-0078D6?logo=windows&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
+
+<img src="docs/dashboard-overview.png" alt="Management dashboard built from the fictional sample file" width="860">
+
+<sub>The dashboard above is generated from the fully fictional <code>sample/sample_input.xlsx</code>: no real people, phones or amounts.</sub>
+
 </div>
 
 ---
@@ -29,6 +39,39 @@ This project was originally written as a private tool for **Rah-e Danesh-e Aref*
 | 🖥️ **Desktop app** (`python/app_desktop.py`) | A simple window: pick the Excel file, run the engine, open the output, open the dashboard, change settings. No command line needed. |
 | 🐍 **Engine** (`python/wosool_engine.py`) | Reconciles the follow-up list with the latest raw finance export and rebuilds every report sheet. |
 | 📊 **Dashboard** (`dashboard/dashboard_modiriati_FINAL.html`) | Opens in any browser, reads the engine output and shows totals, trends, portfolio, risk tiers, expert ranking, top debtors and period-over-period changes. |
+
+### How it works
+
+```mermaid
+flowchart LR
+    A[Follow-up list<br/>Main sheet] --> E{{Reconciliation engine<br/>wosool_engine.py}}
+    B[Latest finance export<br/>Initial raw financial sheet] --> E
+    E --> C[Output workbook<br/>updated lists + reports]
+    C --> D[Browser dashboard<br/>totals, risk, experts, trends]
+```
+
+1. Finance exports the current installments; the team keeps its follow-up list.
+2. The engine compares them by the unique `term`, finds cleared, new and conflicting installments, and assigns experts by the rules below.
+3. It writes a new dated workbook (the input is never overwritten) and the dashboard reads that workbook locally in the browser.
+
+### Tech stack
+
+| Layer | Tools |
+|---|---|
+| Engine | Python, pandas, openpyxl |
+| Desktop app | Tkinter, Pillow, PyInstaller (Windows `.exe`) |
+| Dashboard | Plain HTML/CSS/JavaScript, Chart.js, SheetJS, html2canvas (runs fully client-side) |
+
+### Project structure
+
+```text
+python/               desktop app + reconciliation engine + build script
+dashboard/            ready-to-open dashboard (single HTML file)
+dashboard-modiriati/  dashboard sources (template, app.js) and build script
+template/             blank input workbook with a Guide sheet
+sample/               fully fictional example input + generator
+docs/                 screenshots
+```
 
 ### Input workbook
 
@@ -118,6 +161,16 @@ Real Excel files are ignored by `.gitignore`. Never commit customer names, phone
 | 🖥️ **اپ دسکتاپ** | یک پنجره‌ی ساده: انتخاب فایل اکسل، اجرای موتور، باز کردن خروجی و داشبورد، تنظیمات. بدون خط فرمان. |
 | 🐍 **موتور** (`wosool_engine.py`) | فهرست پیگیری را با آخرین خروجی خام مالی تطبیق می‌دهد و همه‌ی شیت‌های گزارش را از نو می‌سازد. |
 | 📊 **داشبورد** | در هر مرورگری باز می‌شود و خروجی موتور را به‌صورت آمار، روند، پرتفوی، سطح ریسک، رتبه‌بندی کارشناس‌ها و بدهکاران برتر نشان می‌دهد. |
+
+### نحوه‌ی کار
+
+۱. بخش مالی خروجی اقساط فعلی را می‌دهد و تیم پیگیری فهرست خودش را نگه می‌دارد.
+۲. موتور هر دو را با `term` یکتا مقایسه می‌کند، چک‌های پاس‌شده، اقساط جدید و تفاوت‌ها را پیدا می‌کند و کارشناس را طبق قوانین پایین تعیین می‌کند.
+۳. یک فایل جدید با تاریخ در نام ساخته می‌شود (ورودی هرگز بازنویسی نمی‌شود) و داشبورد همین فایل را داخل مرورگر و روی خود کامپیوتر می‌خواند.
+
+### ابزارها
+
+پایتون، pandas، openpyxl برای موتور · Tkinter و PyInstaller برای اپ دسکتاپ ویندوز · HTML/CSS/JavaScript و Chart.js برای داشبورد (کاملاً سمت کاربر).
 
 ### فایل ورودی
 
